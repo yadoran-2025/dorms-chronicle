@@ -1,4 +1,4 @@
-import {importanceLabels,loadSwimlane,swimlaneDateRange,eventPeriods,packTimelineItems,placeRelationLabel,cardRelationPaths,relationChain} from '../swimlane-data.js';
+import {importanceLabels,loadSwimlane,swimlaneDateRange,eventPeriods,eventMonthLabel,packTimelineItems,placeRelationLabel,cardRelationPaths,relationChain} from '../swimlane-data.js';
 import {getSwimlaneEmbed,setupSwimlaneModal} from './swimlane-modal.js';
 
 const $=id=>document.getElementById(id);
@@ -19,9 +19,15 @@ const icon=d=>{
  return node;
 };
 const DAY=86400000;
-const iso=t=>new Date(t).toISOString().slice(0,10);
 const monthOf=t=>new Date(t).getUTCFullYear()*12+new Date(t).getUTCMonth();
 const monthStart=m=>Date.UTC(Math.floor(m/12),m%12,1);
+const yearFloor=m=>Math.floor(m/12)*12;
+const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
+function riseIn(node,delay=0){
+ if(!reducedMotion.matches)node.animate([{opacity:0,transform:'translateY(10px)'},{opacity:1,transform:'none'}],{
+  duration:440,delay,easing:'ease-out',fill:'backwards'
+ });
+}
 const bounds=value=>swimlaneDateRange(value,SheetData.dateRange);
 const periodInterval=period=>({
  start:period.start?bounds(period.start).start:-Infinity,
@@ -44,7 +50,7 @@ async function init(){
  let {events,categories,actors,relations,periods,availableCategories=categories}=data;
  if(!events.length)throw Error('표시할 수업 사건이 없습니다.');
  let reader=setupSwimlaneModal(data,frame);
- const open=(kind,record)=>reader.open(kind,record);
+ const open=(kind,record)=>{pauseSequence();reader.open(kind,record);};
  const records=new Map(),role=new Map(),intervals=new Map();
  let min=Infinity,max=-Infinity;
  function indexLesson(){
@@ -64,10 +70,10 @@ async function init(){
  }
  indexLesson();
  const requested=params.get('focus');
- const initial=/^\d{4}-(0[1-9]|1[0-2])$/.test(requested)?bounds(requested).start:null;
+ const initial=/^\d{4}(-(0[1-9]|1[0-2]))?$/.test(requested)?bounds(requested).start:null;
  let anchor=initial??Math.min(...events.map(e=>intervals.get(e.id).start));
- let size=initial?1:frame?.hasAttribute('data-package-draft')?0:36;
- let customRange=false;
+ let size=initial!==null?12:frame?.hasAttribute('data-package-draft')?0:36;
+ let sequence=null,allEdges=false,fontsReady=false,animatedRange='';
  let selected='',relationFocus=null,preferred=null,anchors=new Map(),start,end,ticks,plotWidth;
  const laneOverrides=new Set();
  let expandByDefault=false;
@@ -298,11 +304,11 @@ async function init(){
  const intersects=i=>i&&i.start<end&&i.end>start;
  const labelDate=r=>[r.date||r.start,r.end].filter(Boolean).join(' – ');
  let wheelRemainder=0,wheelFrame=0;
- function setWindow(t,months,custom=false){anchor=t;size=months;customRange=custom;selected='';preferred=null;wheelRemainder=0;render();}
- function panMonths(months){
+ function setWindow(t,months){stopSequence();anchor=t;size=months;selected='';preferred=null;wheelRemainder=0;render();}
+ function panYears(years){
   const begin=monthOf(start),span=monthOf(end)-begin;
-  const next=Math.max(min,Math.min(max-span,begin+months));
-  if(next!==begin)setWindow(monthStart(next),size,true);
+  const next=Math.max(min,Math.min(max-span,begin+years*12));
+  if(next!==begin)setWindow(monthStart(next),size);
  }
  const expand=$('swimlane-fullscreen');
  const swimlaneActions=$('swimlane-actions');
@@ -322,19 +328,21 @@ async function init(){
   const pixels=direction*(event.deltaMode===1?16:event.deltaMode===2?viewport.clientWidth:1);
   if(Math.sign(wheelRemainder)!==Math.sign(pixels))wheelRemainder=0;
   wheelRemainder+=pixels;
-  if(wheelFrame||Math.abs(wheelRemainder)<64)return;
+  if(wheelFrame||Math.abs(wheelRemainder)<96)return;
   wheelFrame=requestAnimationFrame(()=>{
    wheelFrame=0;
    const total=wheelRemainder;
-   const months=Math.trunc(total/64);
-   if(months)panMonths(months);
-   wheelRemainder=total%64;
+   const years=Math.trunc(total/96);
+   if(years)panYears(years);
+   wheelRemainder=total%96;
   });
  },{passive:false});
  viewport.addEventListener('keydown',event=>{
   if(event.target!==viewport||event.key!=='ArrowLeft'&&event.key!=='ArrowRight')return;
-  event.preventDefault();
-  panMonths(event.key==='ArrowLeft'?-1:1);
+  if(!handleSequenceKey(event)){
+   event.preventDefault();
+   panYears(event.key==='ArrowLeft'?-1:1);
+  }
  });
  const overview=$('overview'),ruler=$('ruler'),eraOverview=$('era-overview'),viewportMark=make('i','window');
  let eraItems=[],extentStart,extentEnd;
@@ -347,7 +355,7 @@ async function init(){
   const levels=new Set(events.map(event=>event.importance));
   $('importance-key').replaceChildren(...[...importanceLabels].filter(([level])=>levels.has(level)).map(([level,label])=>make('span','level-'+level,label)));
   $('extent').textContent=firstYear+'–'+lastYear+' · 사건 '+events.length+'개';
-  $('jump').min=firstYear+'-01';$('jump').max=lastYear+'-12';
+  $('jump').min=firstYear;$('jump').max=lastYear;
   overview.replaceChildren();ruler.replaceChildren();eraOverview.replaceChildren();
   for(let y=firstYear;y<=lastYear;y++){
    const b=button('',()=>setWindow(Date.UTC(y,0),12));
@@ -402,7 +410,7 @@ async function init(){
  overview.addEventListener('pointerdown',e=>{
   if(e.button!==0)return;
   ignoreClick=false;
-  const m=monthAt(e.clientX),left=monthOf(start),right=monthOf(end);
+  const m=yearFloor(monthAt(e.clientX)),left=monthOf(start),right=monthOf(end);
   const bounds=viewportMark.getBoundingClientRect();
   const mode=Math.abs(e.clientX-bounds.left)<5?'left':Math.abs(e.clientX-bounds.right)<5?'right':
     m>=left&&m<right&&right-left<max-min?'pan':'select';
@@ -412,37 +420,42 @@ async function init(){
   if(!drag||Math.abs(e.clientX-drag.x)<4&&!drag.moved)return;
   overview.setPointerCapture(e.pointerId);
   drag.moved=true;
-  const m=monthAt(e.clientX),width=drag.right-drag.left;
+  const m=yearFloor(monthAt(e.clientX)),width=drag.right-drag.left;
   if(drag.mode==='pan'){
    drag.from=Math.max(min,Math.min(max-width,drag.left+m-drag.m));drag.to=drag.from+width;
-  }else if(drag.mode==='left'){drag.from=Math.min(m,drag.right-1);}
-  else if(drag.mode==='right'){drag.to=Math.max(m+1,drag.left+1);}
-  else{drag.from=Math.min(m,drag.m);drag.to=Math.max(m,drag.m)+1;}
+  }else if(drag.mode==='left'){drag.from=Math.min(m,drag.right-12);}
+  else if(drag.mode==='right'){drag.to=Math.max(m+12,drag.left+12);}
+  else{drag.from=Math.min(m,drag.m);drag.to=Math.max(m,drag.m)+12;}
   Object.assign(viewportMark.style,{left:100*(drag.from-min)/(max-min)+'%',width:100*(drag.to-drag.from)/(max-min)+'%'});
  });
  overview.addEventListener('pointerup',()=>{
-  if(drag?.moved){ignoreClick=true;setWindow(monthStart(drag.from),drag.to-drag.from,true);}
+  if(drag?.moved){ignoreClick=true;setWindow(monthStart(drag.from),drag.to-drag.from);}
   drag=null;
  });
  overview.addEventListener('pointercancel',()=>{drag=null;render();});
  overview.addEventListener('click',e=>{if(ignoreClick){e.stopPropagation();ignoreClick=false;}},true);
- for(const [months,label] of [[0,'전체'],[120,'10년'],[36,'3년'],[12,'1년'],[1,'1개월']]){
+ for(const [months,label] of [[0,'전체'],[120,'10년'],[36,'3년'],[12,'1년']]){
   const b=button(label,()=>{const t=intervals.get(selected)?.start;setWindow(Number.isFinite(t)?t:anchor,months);});
   b.dataset.months=months;$('zoom').append(b);
  }
  $('jump').onchange=()=>{
   if(!$('jump').value||!$('jump').validity.valid)return;
-  setWindow(bounds($('jump').value).start,1);
-  $('month-panel').hidePopover();
+  setWindow(monthStart(Number($('jump').value)*12),12);
+  $('year-panel').hidePopover();
  };
- $('prev').onclick=()=>setWindow(monthStart(Math.max(min,monthOf(start)-size)),size,customRange);
- $('next').onclick=()=>setWindow(monthStart(monthOf(end)),size,customRange);
+ $('prev').onclick=()=>setWindow(monthStart(Math.max(min,monthOf(start)-size)),size);
+ $('next').onclick=()=>setWindow(monthStart(monthOf(end)),size);
  const toggleLanes=$('toggle-lanes');
  toggleLanes.onclick=()=>{
+  stopSequence();
   expandByDefault=!allLanesExpanded();laneOverrides.clear();
   selected='';relationFocus=null;render();
  };
  $('relations').onclick=()=>open('all');
+ const allEdgesButton=$('all-edges');
+ allEdgesButton.onclick=()=>{
+  allEdges=!allEdges;allEdgesButton.setAttribute('aria-pressed',String(allEdges));drawEdges();
+ };
  function addAnchor(id,node){
   if(!anchors.has(id))anchors.set(id,[]);
   anchors.get(id).push(node);
@@ -455,6 +468,7 @@ async function init(){
  function laneToggle(category,hasEvents){
   const active=laneExpanded(category);
   const control=button('',()=>{
+   stopSequence();
    if(!laneOverrides.delete(category.id))laneOverrides.add(category.id);
    selected='';relationFocus=null;
    render();
@@ -519,7 +533,11 @@ async function init(){
   host.append(line);
   const track=make('div',collapsed?'track lane-preview':'track');line.append(track);
   if(record)track.dataset.inkLane=record.id;
-  if(!collapsed)for(const tick of ticks){const grid=make('i','tick');grid.style.left=x(tick.t)+'px';track.append(grid);}
+  if(!collapsed)for(const [index,tick] of ticks.entries()){
+   const grid=make('i',index%2?'tick shaded':'tick');
+   const left=x(tick.t);
+   grid.style.left=left+'px';grid.style.width=x(ticks[index+1]?.t??end)-left+'px';track.append(grid);
+  }
   return track;
  }
  function periodLane(){
@@ -596,7 +614,8 @@ async function init(){
     years.get(date).append(card);addAnchor(r.id,mark);continue;
    }
    const duration=Boolean(r.end);
-   mark.prepend(make('time','',labelDate(r)));
+   const when=eventMonthLabel(r);
+   if(when)mark.append(make('small','when',when));
    mark.classList.add(duration?'span-event':'point-event');
    body.append(card);addAnchor(r.id,mark);
    const width=card.offsetWidth;
@@ -696,7 +715,9 @@ async function init(){
   const isActive=r=>relationFocus?.relationIds.has(r.id)||selected===r.fromId||selected===r.toId;
   const drawOrder=r=>r.id===relationFocus?.id?2:Number(isActive(r));
   const links=[];
+  const pending=new Set(sequence?.steps.slice(sequence.index).map(step=>step.id));
   for(const rel of [...relations].sort((a,b)=>drawOrder(a)-drawOrder(b))){
+   if((!allEdges&&!isActive(rel))||pending.has(rel.fromId)||pending.has(rel.toId))continue;
    const sources=candidates(rel.fromId),targets=candidates(rel.toId);
    let nearest=Infinity,pair;
    for(const from of sources)for(const to of targets){
@@ -777,13 +798,101 @@ async function init(){
    }
   }
  }
+ const sequenceControls=$('sequence');
+ const play=button('',()=>{
+  if(!sequence||sequence.index===sequence.steps.length)startSequence();
+  else if(sequence.timer)pauseSequence();
+  else resumeSequence();
+ },'sequence-play');
+ const back=button('←',()=>{pauseSequence();stepSequence(-1);});
+ const forward=button('→',()=>{pauseSequence();stepSequence(1);});
+ const finish=button('모두 보기',()=>{
+  stopSequence();paintSequence();drawEdges();play.focus({preventScroll:true});
+ });
+ const progress=make('span','sequence-count');
+ back.setAttribute('aria-label','이전 사건으로');forward.setAttribute('aria-label','다음 사건 보기');
+ progress.setAttribute('aria-live','polite');
+ sequenceControls.append(play,back,progress,forward,finish);
+ sequenceControls.addEventListener('keydown',handleSequenceKey);
+ function handleSequenceKey(event){
+  if(!sequence||event.altKey||event.ctrlKey||event.metaKey||event.shiftKey||
+   (event.key!=='ArrowLeft'&&event.key!=='ArrowRight'))return false;
+  event.preventDefault();pauseSequence();stepSequence(event.key==='ArrowLeft'?-1:1);
+  return true;
+ }
+ function revealSteps(){
+  const steps=[];
+  for(const [id,nodes] of anchors){
+   if(role.get(id)!=='event')continue;
+   const cards=nodes.filter(node=>node.matches('.event')).map(node=>node.closest('.room-event-card')||node);
+   if(cards.length)steps.push({id,time:intervals.get(id).start,nodes:cards});
+  }
+  return steps.sort((a,b)=>a.time-b.time||a.id.localeCompare(b.id));
+ }
+ function playEntrance(){
+  if(reducedMotion.matches)return;
+  const steps=revealSteps(),gap=Math.min(90,1200/Math.max(1,steps.length));
+  for(const [index,step] of steps.entries())for(const node of step.nodes)riseIn(node,index*gap);
+ }
+ function paintSequence(){
+  const shown=sequence?.index??0,total=sequence?.steps.length??0;
+  play.textContent=!sequence?'▶ 순서대로 보기':sequence.timer?'❚❚ 멈춤':shown===total?'↺ 처음부터':'▶ 이어 보기';
+  play.disabled=!sequence&&!events.some(event=>intervals.get(event.id)?.start>=start&&intersects(intervals.get(event.id)));
+  for(const node of [back,progress,forward,finish])node.hidden=!sequence;
+  progress.textContent=shown+' / '+total;
+  back.disabled=!shown;forward.disabled=shown>=total;
+  viewport.setAttribute('aria-description',sequence?'좌우 화살표 키로 이전 또는 다음 사건 보기':'좌우 화살표 키로 한 해씩 이동');
+  for(const node of viewport.querySelectorAll('.waiting,[data-now]')){
+   node.classList.remove('waiting');node.removeAttribute('data-now');
+  }
+  if(!sequence)return;
+  for(const [index,step] of sequence.steps.entries())for(const node of step.nodes){
+   node.classList.toggle('waiting',index>=shown);
+   node.toggleAttribute('data-now',index===shown-1);
+  }
+  for(const group of viewport.querySelectorAll('.year-events')){
+   group.classList.toggle('waiting',[...group.querySelectorAll('.event')].every(node=>(node.closest('.room-event-card')||node).classList.contains('waiting')));
+  }
+ }
+ function stepSequence(direction){
+  const next=sequence.index+direction;
+  if(next<0||next>sequence.steps.length)return;
+  sequence.index=next;
+  if(next===sequence.steps.length)pauseSequence();
+  paintSequence();drawEdges();
+  if(!next)return;
+  const {nodes}=sequence.steps[next-1];
+  if(direction>0)for(const node of nodes)riseIn(node);
+  nodes[0].scrollIntoView({block:'nearest',inline:'nearest',behavior:reducedMotion.matches?'instant':'smooth'});
+ }
+ function resumeSequence(){
+  if(sequence.index>=sequence.steps.length||sequence.timer)return;
+  sequence.timer=setInterval(()=>stepSequence(1),1150);
+  paintSequence();
+ }
+ function pauseSequence(){
+  if(!sequence?.timer)return;
+  clearInterval(sequence.timer);sequence.timer=0;paintSequence();
+ }
+ function stopSequence(){
+  clearInterval(sequence?.timer);sequence=null;
+ }
+ function startSequence(){
+  stopSequence();
+  expandByDefault=true;laneOverrides.clear();
+  selected='';relationFocus=null;
+  sequence={steps:[],index:0,timer:0};
+  render();
+  if(sequence.steps.length){stepSequence(1);resumeSequence();}
+  else{stopSequence();paintSequence();drawEdges();}
+ }
  function follow(id,node){
   const r=records.get(id);if(!r)return;
   node??=anchors.get(id)?.[0];
   if(!node){
    const i=intervals.get(id);
    if(!i){open(role.get(id),r);return;}
-   anchor=Number.isFinite(i.start)?i.start:i.end-DAY;render();node=anchors.get(id)?.[0];
+   setWindow(Number.isFinite(i.start)?i.start:i.end-DAY,size);node=anchors.get(id)?.[0];
   }
   if(!node){open(role.get(id),r);return;}
   select(id,node);
@@ -814,26 +923,22 @@ async function init(){
  function drawTimeline(){
   const span=Math.min(size||max-min,max-min);
   const focus=Math.min(Math.max(monthOf(anchor),min),max-1);
-  const begin=Math.max(min,Math.min(size===1||customRange?focus:Math.floor(focus/12)*12,max-span));
+  const begin=Math.max(min,Math.min(yearFloor(focus),max-span));
   start=monthStart(begin);end=monthStart(begin+span);
   plotWidth=$('ticks').clientWidth;if(plotWidth<30)return;
   $('relations').textContent='전체 관계 '+relations.length+'건';
-  $('range').textContent=span===1?iso(start).slice(0,7).replace('-','년 ')+'월':span===12&&begin%12===0?iso(start).slice(0,4)+'년':iso(start).slice(0,7)+' — '+iso(end-DAY).slice(0,7);
-  $('pick-month').setAttribute('aria-label',$('range').textContent+' · 연월 선택');
-  $('jump').value=iso(monthStart(focus)).slice(0,7);$('prev').disabled=begin<=min;$('next').disabled=begin+span>=max;
+  const firstYear=begin/12,lastYear=(begin+span)/12-1;
+  $('range').textContent=firstYear===lastYear?firstYear+'년':firstYear+' — '+lastYear+'년';
+  $('pick-year').setAttribute('aria-label',$('range').textContent+' · 연도 선택');
+  $('jump').value=Math.floor(focus/12);$('prev').disabled=begin<=min;$('next').disabled=begin+span>=max;
   for(const b of $('zoom').children)b.setAttribute('aria-pressed',String(+b.dataset.months===size));
   Object.assign(viewportMark.style,{left:100*(begin-min)/(max-min)+'%',width:100*span/(max-min)+'%'});
   ticks=[];
-  if(span===1){
-   const step=plotWidth>700?2:plotWidth>350?5:7;
-   for(let d=0;start+d*DAY<end;d+=step)ticks.push({t:start+d*DAY,label:(d+1)+'일'});
-  }else{
-   const step=size===36?12:span<=12?(plotWidth<430?2:1):span<=36?(plotWidth<430?6:3):12*Math.ceil(span/12/Math.max(3,Math.floor(plotWidth/65)));
-   const tickOrigin=Math.min(12,step);
-   for(let m=Math.ceil(begin/tickOrigin)*tickOrigin;m<begin+span;m+=step)ticks.push({t:monthStart(m),label:m%12===0?Math.floor(m/12)+'년':m%12+1+'월'});
-  }
+  const step=12*Math.ceil(span/12/Math.max(3,Math.floor(plotWidth/70)));
+  for(let m=begin;m<begin+span;m+=step)ticks.push({t:monthStart(m),label:m/12+'년'});
+  viewport.classList.toggle('yearly',step===12);
   $('ticks').replaceChildren();for(const tick of ticks){if(plotWidth-x(tick.t)<34&&tick.t!==start)continue;
-   const el=span===1?make('span','',tick.label):button(tick.label,()=>setWindow(tick.t,span<=36?1:12),'axis-jump');
+   const el=span===12?make('span','',tick.label):button(tick.label,()=>setWindow(tick.t,12),'axis-jump');
    el.style.left=x(tick.t)+2+'px';$('ticks').append(el);}
   if(colorPicker.matches(':popover-open'))colorPicker.hidePopover();
   const pinnedScroll=pinnedLanes.scrollTop;
@@ -867,7 +972,18 @@ async function init(){
    if(!events.some(e=>intersects(intervals.get(e.id))))$('lanes').append(make('p','empty','이 구간에 기록된 수업 사건이 없습니다.'));
   }
   if(moving?.grip&&!moving.grip.isConnected)moving=null;
+  if(sequence){
+   sequence.steps=revealSteps().filter(step=>step.time>=start);
+   sequence.index=Math.min(sequence.index,sequence.steps.length);
+   if(sequence.index===sequence.steps.length){clearInterval(sequence.timer);sequence.timer=0;}
+  }
+  paintSequence();
   paintCategoryColors();paintMove();paintSelection();drawEdges();paintInk();
+  const range=start+'-'+end;
+  if(fontsReady&&range!==animatedRange){
+   animatedRange=range;
+   if(!sequence)playEntrance();
+  }
  }
  const heading=$('timeline-heading');
  let pageHeightFloor=0,headingShift=0,edgeFrame=0;
@@ -928,7 +1044,7 @@ async function init(){
   host.addEventListener('scroll',onViewportChange,{passive:true,signal:listening.signal});
   host.addEventListener('resize',onViewportChange,{signal:listening.signal});
  }
- window.addEventListener('pagehide',()=>listening.abort(),{once:true});
+ window.addEventListener('pagehide',()=>{pauseSequence();listening.abort();},{once:true});
  let fullInPage=false,returnScroll;
  function syncFullscreen(){
   const wasActive=root.classList.contains('swimlane-expanded');
@@ -970,6 +1086,7 @@ async function init(){
   frame.redrawSwimlaneColors=paintCategoryColors;
   frame.redrawSwimlane=()=>{moving=null;pendingDestination=null;render();};
   frame.updateSwimlaneLesson=lesson=>{
+   stopSequence();
    if(document.querySelector('#reader[open]'))reader.close();
    ({events,categories,actors,relations,periods,availableCategories=categories}=lesson);
    indexLesson();
@@ -988,6 +1105,6 @@ async function init(){
  $('status').textContent='';renderOverview();syncFullscreen();
  new ResizeObserver(()=>{if($('ticks').clientWidth!==plotWidth)render();fitFrame();}).observe(main);
  new ResizeObserver(layoutEraOverview).observe(eraOverview);
- document.fonts.ready.then(()=>{layoutEraOverview();render();fitFrame();});
+ document.fonts.ready.then(()=>{fontsReady=true;layoutEraOverview();render();});
 }
 init().catch(error=>{$('status').textContent='스윔레인을 불러오지 못했습니다. '+error.message;});

@@ -1,4 +1,4 @@
-import {useLayoutEffect,useMemo,useRef,useState,type CSSProperties} from 'react';
+import {useEffect,useLayoutEffect,useMemo,useRef,useState,type CSSProperties} from 'react';
 import type {EventRecord} from './metro-model';
 import {strataTimeline} from './strata-model';
 import {WorkspaceEventCard} from './WorkspaceRoomEditor';
@@ -94,6 +94,23 @@ export function BasicTimeline({events,categories,records,relations,onVisit,showr
   };
  },[mode,columns,showroomFrame]);
  useLayoutEffect(()=>{viewport.current?.scrollTo(0,0);},[mode,selected]);
+ useEffect(()=>{
+  const box=viewport.current;
+  if(!box||!('IntersectionObserver' in window)||matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  const observer=new IntersectionObserver(entries=>{
+   const arrivals=entries.filter(entry=>entry.isIntersecting);
+   for(const [index,{target:card}] of arrivals.entries()){
+    observer.unobserve(card);
+    (card as HTMLElement).dataset.shown='';
+    if(card===document.activeElement||matchMedia('(prefers-reduced-motion: reduce)').matches)continue;
+    card.animate([{opacity:0,transform:'translateY(12px)'},{opacity:1,transform:'none'}],{
+     duration:440,delay:Math.min(index*70,420),easing:'ease-out',fill:'backwards'
+    });
+   }
+  });
+  for(const card of box.querySelectorAll('.basic-timeline-event:not([data-shown])'))observer.observe(card);
+  return ()=>observer.disconnect();
+ },[years,columns]);
  function jumpYear(year:number){
   const box=viewport.current,group=box?.querySelector('tbody[data-year="'+year+'"]');
   const head=box?.querySelector('thead');
@@ -127,7 +144,7 @@ export function BasicTimeline({events,categories,records,relations,onVisit,showr
    <div className="bt-board" ref={viewport} role="region" aria-label={modes[mode]+'별 연표'} tabIndex={0}>
     <table style={{'--lanes':columns.length} as CSSProperties} aria-label={modes[mode]+'별 사건'}>
      <colgroup><col className="bt-year-col"/><col className="bt-date-col"/>{columns.map(col=><col key={col.id}/>)}</colgroup>
-     <thead><tr><th colSpan={2}>시간</th>{columns.map((col,i)=><th key={col.id} scope="col" data-tone={i%3}>{col.name} <small>{col.count}개</small></th>)}</tr></thead>
+     <thead><tr><th colSpan={2}>연도</th>{columns.map((col,i)=><th key={col.id} scope="col" data-tone={i%3}>{col.name} <small>{col.count}개</small></th>)}</tr></thead>
      {years.map(group=><tbody key={group.year} data-year={group.year}>{group.events.map((event,index)=>{
       const assigned=new Set(event.directTopicIds);
       const ungrouped=!columns.some(col=>col.id!==uncategorized&&assigned.has(col.id));
@@ -138,13 +155,14 @@ export function BasicTimeline({events,categories,records,relations,onVisit,showr
       const context=description&&description!==event.title?undefined:relatedContext.get(event.id);
       const summary=context?.body||(description!==event.title?description:'');
       const period=event.endDate?periodLabel(event.date,event.endDate):'';
+      const month=event.endDate?0:Number(event.date.split('-')[1]);
       return <tr key={event.id}>
        {!index&&<th scope="rowgroup" rowSpan={group.events.length}><span>{group.year}</span></th>}
-       <th scope="row"><time dateTime={event.date}>{dateLabel(event.date,group.year)}</time></th>
+       <th scope="row"><time className="bt-visually-hidden" dateTime={event.date}>{dateLabel(event.date,group.year)}</time></th>
        {columns.map((col,i)=><td key={col.id} data-tone={i%3} className={i===last?'bt-branch bt-end':i<last?'bt-branch':undefined}>
         {membership[i]&&<WorkspaceEventCard event={event} onHide={onHideEvent}><button type="button" className="basic-timeline-event" data-open-event={event.id} aria-haspopup="dialog"
          aria-label={event.date+' '+event.title} onClick={e=>onVisit(event.id,e.currentTarget)}>
-         <span className="bt-card-heading"><strong>{event.title}</strong><span className="bt-card-chevron" aria-hidden="true">›</span></span>
+         <span className="bt-card-heading"><strong>{event.title}{month>0&&<small className="bt-card-month">{month}월</small>}</strong><span className="bt-card-chevron" aria-hidden="true">›</span></span>
          {(period||place)&&<span className="bt-card-facts">
           {period&&<span className="bt-card-period">{period}</span>}{place&&<span>{place}</span>}
          </span>}

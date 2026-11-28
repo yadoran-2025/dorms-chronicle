@@ -4,7 +4,7 @@ import test from 'node:test';
 import '../sheets.js';
 import '../history.js';
 import {countryFlag} from '../assets/country-flag.js';
-import {buildSwimlane, lessonSwimlane, matchSwimlaneEvents, packTimelineItems, placeRelationLabel, pointRelationPath, cardRelationPaths, relationChain} from '../swimlane-data.js';
+import {buildSwimlane, eventMonthLabel, lessonSwimlane, matchSwimlaneEvents, packTimelineItems, placeRelationLabel, pointRelationPath, cardRelationPaths, relationChain} from '../swimlane-data.js';
 
 test('sheet events retain an optional end date and reject an inverted range', () => {
   const event = {사건ID: 'E1', 날짜: '1910', 종료일: '1918', 사건명: '토지 조사 사업', 주제: '정책', 중요도: ' core '};
@@ -204,4 +204,15 @@ test('lesson reader receives participant roles and the verified terms overlappin
   assert.deepEqual(HistoryViews.leadersDuring(lesson.leadership.tenures,'actor_gdr',bounds),[tenures[0]]);
   assert.equal(countryFlag(countries[0],'1959-09').src,'/assets/flags/de.svg');
   assert.equal(countryFlag(countries[0],'1959-10').src,'/assets/flags/gdr.webp');
+});
+
+test('a card shows its month, or its years when it spans more than one', () => {
+  assert.equal(eventMonthLabel({date: '1919-03-01'}), '3월');
+  assert.equal(eventMonthLabel({date: '1920-10'}), '10월');
+  assert.equal(eventMonthLabel({date: '1911'}), '');
+  assert.equal(eventMonthLabel({date: '1910', end: '1918'}), '1910–1918');
+  assert.equal(eventMonthLabel({start: '1919-04', end: '1932-05'}), '1919–1932');
+  assert.equal(eventMonthLabel({date: '1920-06', end: '1920-10'}), '6–10월');
+  assert.equal(eventMonthLabel({date: '1926-06-10', end: '1926-06-12'}), '6월');
+  assert.equal(eventMonthLabel({date: '1929', end: '1929'}), '');
 });

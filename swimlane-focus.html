@@ -13,15 +13,15 @@
 <div class="controls">
  <div class="move" role="group" aria-label="표시 구간 이동">
   <button id="prev" aria-label="이전 구간">←</button>
-  <h1><button id="pick-month" popovertarget="month-panel" aria-label="연월 선택"><span id="range" aria-live="polite"></span><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4m8-4v4M4 11h16"/></svg></button></h1>
+  <h1><button id="pick-year" popovertarget="year-panel" aria-label="연도 선택"><span id="range" aria-live="polite"></span><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4m8-4v4M4 11h16"/></svg></button></h1>
   <button id="next" aria-label="다음 구간">→</button>
-  <div popover id="month-panel"><label for="jump">연월로 이동</label><input id="jump" type="month"></div>
+  <div popover id="year-panel"><label for="jump">연도로 이동</label><input id="jump" type="number" inputmode="numeric" step="1"></div>
  </div>
  <div id="zoom" role="group" aria-label="시간축 확대 범위"></div>
 </div>
-<div class="key"><span><i class="point-symbol" aria-hidden="true"></i>시점 사건</span><span><i class="span-symbol" aria-hidden="true"></i>기간 사건</span><div id="importance-key" role="group" aria-label="사건 중요도"></div><button id="relations">전체 관계</button></div>
-<div class="viewport" role="region" aria-label="시기와 카테고리별 시간축" aria-description="좌우 화살표 키로 표시 구간 이동" tabindex="0">
- <div class="plot"><div id="timeline-heading"><div class="axis row">
+<div class="key"><span><i class="point-symbol" aria-hidden="true"></i>시점 사건</span><span><i class="span-symbol" aria-hidden="true"></i>기간 사건</span><div id="importance-key" role="group" aria-label="사건 중요도"></div><button id="all-edges" aria-pressed="false">관계선 보기</button><button id="relations">전체 관계</button></div>
+<div class="viewport" role="region" aria-label="시기와 카테고리별 시간축" aria-description="좌우 화살표 키로 한 해씩 이동" tabindex="0">
+ <div class="plot"><div id="timeline-heading"><div id="sequence" role="group" aria-label="사건을 시간순으로 하나씩 보기"></div><div class="axis row">
   <div class="axis-tools"><strong>시간축</strong><button id="toggle-lanes" type="button" aria-controls="pinned-lanes lanes" aria-expanded="false" aria-label="모두 펼치기" hidden>
    <span>모두 펼치기</span><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 9l5-4 5 4M7 15l5 4 5-4"/></svg>
   </button></div>

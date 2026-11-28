@@ -16,7 +16,7 @@
 .bt-jumps{flex-wrap:wrap;gap:6px;margin-bottom:10px}
 .bt-jumps button{padding:5px 10px;border:1px solid var(--chronicle-line);border-radius:var(--chronicle-button-radius);background:var(--chronicle-surface);font-size:14px}
 .bt-board{
- --year:66px;--stamp:94px;--rail:calc(var(--year) + var(--stamp));--lane:245px;--inset:16px;
+ --year:66px;--stamp:26px;--rail:calc(var(--year) + var(--stamp));--lane:245px;--inset:16px;
  max-height:70dvh;overflow:auto;isolation:isolate;overscroll-behavior-x:contain;
  background:var(--bt-paper);border:1px solid var(--chronicle-line);
 }
@@ -33,7 +33,7 @@
 .bt-board th[scope=rowgroup]{vertical-align:top;text-align:center}
 .bt-board th[scope=rowgroup] span{position:sticky;top:calc(var(--head-top,0px) + var(--head-height));display:block;padding:14px 0;color:#35493e;font:bold clamp(17px,2vw,24px) Georgia,serif}
 .bt-board th[scope=row]{
- left:var(--year);padding:8px 24px 8px 0;white-space:nowrap;text-align:right;font-size:14px;font-weight:550;color:#526254;
+ left:var(--year);padding:8px 0;
  background-image:linear-gradient(#849a88,#849a88),linear-gradient(var(--bt-line),var(--bt-line));
  background-position:right 10px center,right center;background-size:2px 100%,11px 1px;background-repeat:no-repeat;
 }
@@ -59,7 +59,7 @@
 .bt-card-peer{display:block;margin-bottom:3px;font-size:13px;font-weight:600;color:var(--accent)}
 .bt-card-summary{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;color:#445045;font-size:14px;line-height:1.5;word-break:keep-all}
 @media(max-width:700px){
- .bt-board{--year:45px;--stamp:84px;--lane:clamp(180px,55vw,220px);--inset:9px}
+ .bt-board{--year:45px;--stamp:22px;--lane:clamp(180px,55vw,220px);--inset:9px}
  .bt-heading{gap:10px}.bt-modes button{padding:7px 10px}
  .bt-board thead th{padding-block:10px}
  .basic-timeline-event{padding:9px 10px}.basic-timeline-event strong{font-size:16px}
@@ -67,3 +67,6 @@
 .bt-modes>span{margin-right:5px;color:var(--chronicle-muted);font-size:14px}
 .bt-filters{margin:12px 0 16px;padding:12px 16px;border:1px solid var(--chronicle-line);background:var(--chronicle-surface)}
 @media(max-width:500px){.bt-filters{padding:10px}}
+
+.bt-visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.basic-timeline-event .bt-card-month{margin-inline-start:7px;font-size:12.5px;font-weight:550;letter-spacing:0;white-space:nowrap;color:var(--accent);font-variant-numeric:tabular-nums}

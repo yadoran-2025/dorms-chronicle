@@ -341,3 +341,14 @@ export function lessonSwimlane(data, metadata, sheet, actorRelationIds = new Set
 export function eventPeriods(event){
   return event.periodNames ?? (event.period ? [event.period] : []);
 }
+
+// The time axis shows years only, so each card carries its own month.
+// A span inside one year reads as months; a longer one reads as years.
+export function eventMonthLabel(record){
+  const from = record.date || record.start || '', until = record.end || '';
+  const month = value => Number(value.slice(5, 7));
+  if (!until) return month(from) ? month(from) + '월' : '';
+  if (from.slice(0, 4) !== until.slice(0, 4)) return [from.slice(0, 4), until.slice(0, 4)].filter(Boolean).join('–');
+  if (!month(from) || !month(until)) return '';
+  return month(from) === month(until) ? month(from) + '월' : month(from) + '–' + month(until) + '월';
+}
